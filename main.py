@@ -69,7 +69,11 @@ class FileMergerApp(TkinterDnD.Tk):
         self.open_button = tk.Button(self.buttons_frame, text="打开当前文件", command=self.open_current_file)
         self.open_button.pack(side="left", padx=5)
 
-        # 添加info图标按钮到右侧
+        # 添加文件夹导入按钮、清空按钮和info按钮到右侧
+        self.folder_import_button = tk.Button(self.buttons_frame, text="文件夹导入", command=self.import_folder)
+        self.folder_import_button.pack(side="right", padx=5)
+        self.clear_button = tk.Button(self.buttons_frame, text="清空", command=self.clear_file_list)
+        self.clear_button.pack(side="right", padx=5)
         self.info_button = tk.Button(self.buttons_frame, text="info...", command=self.show_info)
         self.info_button.pack(side="right", padx=5)
 
@@ -160,14 +164,30 @@ class FileMergerApp(TkinterDnD.Tk):
 
             with open(self.output_file_path, mode, encoding='utf-16') as outfile:
                 for file in self.file_list:
-                    with open(file, 'rb') as infile:
-                        raw_data = infile.read()
-                        result = chardet.detect(raw_data)
-                        encoding = result['encoding']
-                        content = raw_data.decode(encoding)
-                    outfile.write(f"文件名: {os.path.basename(file)}\n")
-                    outfile.write(content)
-                    outfile.write("\n\n")
+                    try:
+                        with open(file, 'rb') as infile:
+                            raw_data = infile.read()
+                            result = chardet.detect(raw_data)
+                            encoding = result['encoding']
+                            try:
+                                content = raw_data.decode(encoding)
+                            except (UnicodeDecodeError, TypeError):
+                                # 尝试使用 UTF-8 解码
+                                try:
+                                    content = raw_data.decode('utf-8')
+                                except UnicodeDecodeError:
+                                    # 尝试使用 Windows-1252 解码
+                                    try:
+                                        content = raw_data.decode('windows-1252')
+                                    except UnicodeDecodeError as e:
+                                        self.log(f"{datetime.datetime.now().strftime('%H:%M:%S')} 错误：文件 {file} 无法解码，跳过。")
+                                        continue
+                        outfile.write(f"文件名: {os.path.basename(file)}\n")
+                        outfile.write(content)
+                        outfile.write("\n\n")
+                    except Exception as e:
+                        self.log(f"{datetime.datetime.now().strftime('%H:%M:%S')} 错误：处理文件 {file} 时出错，跳过。错误信息：{e}")
+                        continue
             self.log(f"{datetime.datetime.now().strftime('%H:%M:%S')} 文件{self.save_mode.get()} 成功，{self.output_file_path}")
             # messagebox.showinfo("成功", "文件已成功保存")
         except Exception as e:
@@ -195,6 +215,20 @@ class FileMergerApp(TkinterDnD.Tk):
         self.custom_path_entry.insert(0, self.output_file_path)
         self.custom_path_entry.xview_moveto(1)  # 将光标移动到文本的最右边
 
+    def clear_file_list(self):
+        self.file_list = []
+        self.drop_area_label.config(text="拖放文件到此区域")
+
+    def import_folder(self):
+        folder_path = filedialog.askdirectory()
+        if folder_path:
+            for root, _, files in os.walk(folder_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    if os.path.isfile(file_path):
+                        self.file_list.append(file_path)
+            self.drop_area_label.config(text="\n".join(self.file_list))
+
     def show_info(self):
         info_text = (
             "软件名：文件合并工具\n"
@@ -212,7 +246,9 @@ class FileMergerApp(TkinterDnD.Tk):
             "3. 将要合并的文件拖放到“拖放文件到此区域”。\n"
             "4. 选择保存模式（追加、覆盖、新建文件）。\n"
             "5. 点击“保存到TXT文件”按钮保存合并后的文件。\n"
-            "6. 点击“打开当前文件”按钮查看合并后的文件。"
+            "6. 点击“打开当前文件”按钮查看合并后的文件。\n"
+            "7. 点击“清空”按钮清空当前拖入的文件列表。\n"
+            "8. 点击“文件夹导入”按钮选择文件夹并导入所有文件。"
         )
         info_window = tk.Toplevel(self)
         info_window.title("作者声明")
